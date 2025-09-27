@@ -65,8 +65,8 @@ app.post("/create-checkout-session", async (req, res) => {
 
 app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   const sig = req.headers["stripe-signature"];
-  const endpointSecret = "whsec_UIjEwfggJcTmOgJQE7F0lNfcEioFaNsl"; 
-
+  const endpointSecret = "whsec_UIjEwfggJcTmOgJQE7F0lNfcEioFaNsl";
+  
   let event;
 
   try {
@@ -76,27 +76,48 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     return res.sendStatus(400);
   }
 
-  // Handle successful checkout
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-
-    const customerEmail = session.customer_email;
+    
+    // Fix email extraction
+    const customerEmail = session.customer_email || session.customer_details?.email;
     const totalAmount = session.metadata.totalAmount;
+    const customerName = session.customer_details?.name || "Customer";
+    
+    console.log("Processing payment for:", customerEmail, "Amount:", totalAmount);
 
-    // Send emails
-    await sendOrderMail(
-      customerEmail,
-      "Your Order Confirmation",
-      `Thanks for your order. Total: ₹${totalAmount}`,
-      `<h2>Thank you for your order!</h2><p>Total: ₹${totalAmount}</p>`
-    );
+    if (!customerEmail) {
+      console.error("No customer email found");
+      return res.sendStatus(200);
+    }
 
-    await sendOrderMail(
-      "parvkumra2003@gmail.com",
-      "New Order Placed",
-      `New order worth ₹${totalAmount}`,
-      `<h2>New Order Alert</h2><p>Total: ₹${totalAmount}</p>`
-    );
+    try {
+      // Send emails with proper error handling
+      await sendOrderMail(
+        customerEmail,
+        "Your Order Confirmation - Pehli Pasand Jewellery",
+        `Thanks for your order, ${customerName}! Total: ₹${totalAmount}`,
+        `<h2>Thank you for your order!</h2>
+         <p>Dear ${customerName},</p>
+         <p>Your order has been confirmed.</p>
+         <p><strong>Order Total: ₹${totalAmount}</strong></p>
+         <p>Session ID: ${session.id}</p>`
+      );
+
+      await sendOrderMail(
+        "parvkumra2003@gmail.com",
+        "New Order - Pehli Pasand",
+        `New order from ${customerName} - ₹${totalAmount}`,
+        `<h2>New Order Alert</h2>
+         <p>Customer: ${customerName} (${customerEmail})</p>
+         <p>Total: ₹${totalAmount}</p>
+         <p>Session: ${session.id}</p>`
+      );
+      
+      console.log("Emails sent successfully to:", customerEmail);
+    } catch (emailError) {
+      console.error("Failed to send emails:", emailError.message);
+    }
   }
 
   res.sendStatus(200);
