@@ -77,7 +77,7 @@ function Cart() {
       }
 
       // Call backend to create Checkout session
-      const response = await fetch("http://localhost:3000/create-checkout-session", {
+      const response = await fetch("https://project101-production.up.railway.app/create-checkout-session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
