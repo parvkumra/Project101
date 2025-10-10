@@ -1,15 +1,31 @@
 import React, { useEffect } from 'react'
 import { BadgeCheck,SquareX } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
-
+import { useLocation } from 'react-router-dom';
 function Success() {
 
      const navigate = useNavigate();
+ const location = useLocation();
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get("session_id");
+
+    if (sessionId) {
+      fetch("http://localhost:3000/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId })
+      })
+      .then(res => res.json())
+      .then(data => console.log("Emails sent:", data))
+      .catch(err => console.error(err));
+    }
+  }, [location]);
   useEffect(() => {
     localStorage.setItem('cartItems', JSON.stringify([]));
     // optionally redirect back after few seconds
-    const timer = setTimeout(() => navigate('/'), 5000);
+    const timer = setTimeout(() => navigate('/'), 10000);
     return () => clearTimeout(timer);
   }, []);
   return (

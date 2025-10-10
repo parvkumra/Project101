@@ -7,10 +7,8 @@ import bodyParser from "body-parser";
 const app = express();
 const stripe = new Stripe("sk_test_51P1zH2SFRmRanvxhim3NiSxZFDogScuPLOAGk1vdNK6Y410fUvFJeE4NludpmBfU0qBFIkvbg3C8wWAzrFzJdIm200ol5hOlhQ");
 
-app.use(cors({
-  origin: "http://localhost:5173", // Your frontend URL
-  credentials: true
-}));
+app.use(cors());
+
 app.use(express.json());
 
 app.post("/create-checkout-session", async (req, res) => {
@@ -37,20 +35,21 @@ app.post("/create-checkout-session", async (req, res) => {
           quantity: 1,
         },
       ],
-      // Required for Indian regulations
       billing_address_collection: 'required',
       shipping_address_collection: {
         allowed_countries: ['IN']
       },
       customer_email: customerInfo?.email,
-      success_url: "http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "http://localhost:5173/cancel",
+      success_url: "http://localhost:5174/success?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "http://localhost:5174/cancel",
       metadata: {
         totalAmount: totalAmount.toString(),
         itemCount: cartItems?.length?.toString() || "0"
       }
     });
-   
+
+    // Send admin notification (optional - you might want to do this only on webhook)
+  
   
     res.json({ id: session.id });
   } catch (error) {
@@ -62,65 +61,95 @@ app.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-
-app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = "whsec_UIjEwfggJcTmOgJQE7F0lNfcEioFaNsl";
+// app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+//   const sig = req.headers["stripe-signature"];
+//   const endpointSecret = "whsec_UIjEwfggJcTmOgJQE7F0lNfcEioFaNsl";
   
-  let event;
+//   let event;
+
+//   try {
+//     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+//   } catch (err) {
+//     console.log("Webhook signature verification failed.", err.message);
+//     return res.sendStatus(400);
+//   }
+
+//   if (event.type === "checkout.session.completed") {
+//     const session = event.data.object;
+//     log
+//     // Fix email extraction
+//     const customerEmail = session.customer_details?.email;
+//     const totalAmount = session.metadata.totalAmount;
+//     // const customerName = session.customer_details?.name || "Customer";
+    
+//     console.log("Processing payment for:", customerEmail, "Amount:", totalAmount);
+
+//     if (!customerEmail) {
+//       console.error("No customer email found");
+//       return res.sendStatus(200);
+//     }
+
+//     try {
+//       // Send emails with proper error handling
+//       await sendOrderMail(
+//         customerEmail,
+//         "Your Order Confirmation - Pehli Pasand Jewellery",
+//         `Thanks for your order,! Total: ₹${totalAmount}`,
+//         `<h2>Thank you for your order!</h2>
+//          <p>Dear ,</p>
+//          <p>Your order has been confirmed.</p>
+//          <p><strong>Order Total: ₹${totalAmount}</strong></p>
+//          <p>Session ID: ${session.id}</p>`
+//       );
+
+//       await sendOrderMail(
+//         "parvkumra2003@gmail.com",
+//         "New Order - Pehli Pasand",
+//         `New order from  - ₹${totalAmount}`,
+//         `<h2>New Order Alert</h2>
+//          <p>Customer:  (${customerEmail})</p>
+//          <p>Total: ₹${totalAmount}</p>
+//          <p>Session: ${session.id}</p>`
+//       );
+      
+//       console.log("Emails sent successfully to:", customerEmail);
+//     } catch (emailError) {
+//       console.error("Failed to send emails:", emailError.message);
+//     }
+//   }
+
+//   res.sendStatus(200);
+// });
+app.post("/email", async (req, res) => {
+  const { sessionId } = req.body;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    const customerEmail = session.customer_details?.email;
+    const totalAmount = session.amount_total / 100; // convert from paise
+    const customerName = session.customer_details?.name;
+
+    // Send emails
+    await sendOrderMail(
+      customerEmail,
+      "Your Order Confirmation",
+      `Thanks for your order, ${customerName}. Total: ₹${totalAmount}`,
+      `<h2>Thank you for your order!</h2><p>Total: ₹${totalAmount}</p>`
+    );
+
+    await sendOrderMail(
+      "parvkumra2003@gmail.com",
+      "New Order Placed",
+      `New order from ${customerEmail} - ₹${totalAmount}`,
+      `<h2>New Order Alert</h2><p>Customer: ${customerName} (${customerEmail})</p><p>Total: ₹${totalAmount}</p>`
+    );
+
+    res.json({ success: true });
   } catch (err) {
-    console.log("Webhook signature verification failed.", err.message);
-    return res.sendStatus(400);
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    
-    // Fix email extraction
-    const customerEmail = session.customer_email || session.customer_details?.email;
-    const totalAmount = session.metadata.totalAmount;
-    const customerName = session.customer_details?.name || "Customer";
-    
-    console.log("Processing payment for:", customerEmail, "Amount:", totalAmount);
-
-    if (!customerEmail) {
-      console.error("No customer email found");
-      return res.sendStatus(200);
-    }
-
-    try {
-      // Send emails with proper error handling
-      await sendOrderMail(
-        customerEmail,
-        "Your Order Confirmation - Pehli Pasand Jewellery",
-        `Thanks for your order, ${customerName}! Total: ₹${totalAmount}`,
-        `<h2>Thank you for your order!</h2>
-         <p>Dear ${customerName},</p>
-         <p>Your order has been confirmed.</p>
-         <p><strong>Order Total: ₹${totalAmount}</strong></p>
-         <p>Session ID: ${session.id}</p>`
-      );
-
-      await sendOrderMail(
-        "parvkumra2003@gmail.com",
-        "New Order - Pehli Pasand",
-        `New order from ${customerName} - ₹${totalAmount}`,
-        `<h2>New Order Alert</h2>
-         <p>Customer: ${customerName} (${customerEmail})</p>
-         <p>Total: ₹${totalAmount}</p>
-         <p>Session: ${session.id}</p>`
-      );
-      
-      console.log("Emails sent successfully to:", customerEmail);
-    } catch (emailError) {
-      console.error("Failed to send emails:", emailError.message);
-    }
-  }
-
-  res.sendStatus(200);
 });
 
 app.listen(3000, () => console.log("Server running on port 3000"));

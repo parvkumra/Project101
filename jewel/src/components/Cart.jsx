@@ -77,7 +77,7 @@ function Cart() {
       }
 
       // Call backend to create Checkout session
-      const response = await fetch("https://project101-production.up.railway.app/create-checkout-session", {
+      const response = await fetch("http://localhost:3000/create-checkout-session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -110,8 +110,7 @@ function Cart() {
         alert("Payment redirect failed. Please try again.");
       }
 
-    //   localStorage.setItem("cartItems",JSON.stringify([]));
-    //   setChange(change+1)
+    
     } catch (err) {
       console.error("Checkout error:", err);
       alert(`Checkout failed: ${err.message}`);
